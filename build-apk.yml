@@ -1,0 +1,59 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download uploaded project ZIP
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Extract Android project
+        shell: bash
+        run: |
+          set -e
+          ZIP=$(find . -maxdepth 2 -type f -name '*.zip' | head -n 1)
+          if [ -z "$ZIP" ]; then
+            echo "Project ZIP not found."
+            exit 1
+          fi
+          mkdir -p extracted
+          unzip -q "$ZIP" -d extracted
+          ANDROID_DIR=$(find extracted -type f -name settings.gradle -printf '%h\n' | head -n 1)
+          if [ -z "$ANDROID_DIR" ]; then
+            echo "settings.gradle not found after extraction."
+            exit 1
+          fi
+          echo "ANDROID_DIR=$ANDROID_DIR" >> "$GITHUB_ENV"
+          echo "Android project: $ANDROID_DIR"
+
+      - name: Build debug APK
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Run Gradle build
+        shell: bash
+        run: |
+          set -e
+          cd "$ANDROID_DIR"
+          gradle assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apna-general-store-debug-apk
+          path: '${{ env.ANDROID_DIR }}/app/build/outputs/apk/debug/*.apk'
+          if-no-files-found: error
